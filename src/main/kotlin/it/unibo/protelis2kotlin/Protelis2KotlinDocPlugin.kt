@@ -139,6 +139,17 @@ class Protelis2KotlinDocPlugin : Plugin<Project> {
                 genKotlinTask.outputs.files(project.fileTree(extension.kotlinDestDir.get()))
                 genDocTask.inputs.files(project.fileTree(extension.baseDir.get()))
                 genDocTask.outputs.files(project.fileTree(extension.destDir.get()))
+                if (extension.automaticDependencies.get()) {
+                    Log.log("Automatically resolving dependencies")
+                    val deps = project.configurations.getByName(compileConfig).dependencies
+                    if (!deps.any { it.group==kotlinGroup && it.name==kotlinStdlibDepName }) {
+                        project.dependencies.add(compileConfig, "$kotlinGroup:$kotlinStdlibDepName:${extension.kotlinVersion.get()}")
+                    }
+
+                    if (!deps.any { it.group==protelisGroup && it.name==protelisInterpreterDepName }) {
+                        project.dependencies.add(compileConfig, "$protelisGroup:$protelisInterpreterDepName:${extension.protelisVersion.get()}")
+                    }
+                }
             }
         }
     }

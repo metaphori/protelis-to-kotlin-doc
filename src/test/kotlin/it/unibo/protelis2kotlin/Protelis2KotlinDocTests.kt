@@ -146,8 +146,8 @@ public def aggregation(local, reduce) {
         }
 
         dependencies {
-            implementation("org.protelis:protelis-interpreter:11.1.0")
-            implementation(kotlin("stdlib"))
+            // implementation("org.protelis:protelis-interpreter:11.1.0")
+            // implementation(kotlin("stdlib"))
         }
 
         // repositories {
@@ -161,6 +161,7 @@ public def aggregation(local, reduce) {
             // protelisVersion.set("+")
             outputFormat.set("html") // "javadoc"
             debug.set(true)
+            automaticDependencies.set(true)
         }
     """ }
     }
