@@ -3,6 +3,8 @@ package it.unibo.protelis2kotlin
 import org.gradle.api.JavaVersion
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.artifacts.dsl.RepositoryHandler
+import org.gradle.api.artifacts.repositories.ArtifactRepository
 import org.gradle.api.provider.Property
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 import java.io.File
@@ -27,6 +29,18 @@ open class Protelis2KotlinDocPluginExtension @JvmOverloads constructor(
     val debug: Property<Boolean> = project.propertyWithDefault(false)
 )
 
+fun applyPluginIfNotAlreadyApplied(project: Project, pluginId: String) {
+    if (!project.pluginManager.hasPlugin(pluginId)) {
+        project.pluginManager.apply(pluginId)
+    }
+}
+
+fun addRepoIfNotAlreadyPresent(repoHandler: RepositoryHandler, repo: ArtifactRepository) {
+    if(!repoHandler.contains(repo)) {
+        repoHandler.add(repo)
+    }
+}
+
 /**
  * Protelis2KotlinDoc Gradle Plugin: reuses the Protelis2Kotlin and Dokka plugins to generate Kotlin docs from Protelis code.
  */
@@ -36,8 +50,9 @@ class Protelis2KotlinDocPlugin : Plugin<Project> {
     private val compileKotlinTaskName = "compileKotlin"
 
     private val dokkaTaskName = "dokka"
-    private val dokkaPluginName = "org.jetbrains.dokka"
-    private val kotlinPluginName = "org.jetbrains.kotlin.jvm"
+    private val dokkaPluginId = "org.jetbrains.dokka"
+    private val kotlinPluginId = "org.jetbrains.kotlin.jvm"
+    private val kotlinLintPluginId = "org.jlleitschuh.gradle.ktlint"
     private val protelis2KotlinDocPlugin = "Protelis2KotlinDoc"
 
     private val protelisGroup = "org.protelis"
@@ -46,39 +61,47 @@ class Protelis2KotlinDocPlugin : Plugin<Project> {
     private val kotlinStdlibDepName = "kotlin-stdlib"
 
     private val implConfiguration = "implementation"
+    private val compileConfig = "compileClasspath"
 
     override fun apply(project: Project) {
         val extension = project.extensions.create(protelis2KotlinDocPlugin, Protelis2KotlinDocPluginExtension::class.java, project)
         if (JavaVersion.current() > JavaVersion.VERSION_1_8) extension.outputFormat.set("html")
 
-        if (!project.repositories.contains(project.repositories.jcenter())) {
-            project.repositories.add(project.repositories.jcenter())
-        }
-        if (!project.repositories.contains(project.repositories.mavenCentral())) {
-            project.repositories.add(project.repositories.mavenCentral())
-        }
+        addRepoIfNotAlreadyPresent(project.buildscript.repositories, project.buildscript.repositories.gradlePluginPortal())
+        addRepoIfNotAlreadyPresent(project.repositories, project.repositories.jcenter())
+        addRepoIfNotAlreadyPresent(project.repositories, project.repositories.mavenCentral())
 
-        if (!project.pluginManager.hasPlugin(kotlinPluginName)) {
-            project.pluginManager.apply(kotlinPluginName)
-        }
+        Log.log("Buildscript configs: " + project.buildscript.configurations.map { it.name })
+        val buildscriptConf = project.buildscript.configurations.create("download")
+        // project.buildscript.configurations.findByName("classpath")!! // Cannot change dependencies of configuration ':classpath' after it has been resolved
+        project.buildscript.dependencies.add(buildscriptConf.name, "org.jlleitschuh.gradle.ktlint:org.jlleitschuh.gradle.ktlint.gradle.plugin:8.2.0") // org.jlleitschuh.gradle:ktlint.gradle:8.2.0
+        val resconf = buildscriptConf.resolve()
+        Log.log("Resolved plugins: " + resconf.map { it.absolutePath })
 
-        // Add dependency to Kotlin stdlib for TODO()s and Protelis
-        if (extension.automaticDependencies.get()) {
-            val deps = project.configurations.getByName(implConfiguration).dependencies
-            if (!deps.any { it.group==kotlinGroup && it.name==kotlinStdlibDepName }) {
-                project.dependencies.add(implConfiguration, "$kotlinGroup:$kotlinStdlibDepName:${extension.kotlinVersion.get()}")
-            }
+        applyPluginIfNotAlreadyApplied(project, kotlinPluginId)
+        applyPluginIfNotAlreadyApplied(project, kotlinLintPluginId)
+        applyPluginIfNotAlreadyApplied(project, dokkaPluginId)
 
-            if (!deps.any { it.group==protelisGroup && it.name==protelisInterpreterDepName }) {
-                project.dependencies.add(implConfiguration, "$protelisGroup:$protelisInterpreterDepName:${extension.protelisVersion.get()}")
-            }
-        }
+        // The following was an attempt to separate project's dependencies from plugin's dependencies
+        /*
+        val config = project.configurations.create("protelis-doc-config")
+        project.dependencies.add(config.name, "$protelisGroup:$protelisInterpreterDepName:11.1.0")
+        project.dependencies.add(config.name, "org.jetbrains.kotlin:kotlin-stdlib:1.2.41")
+        val resolvedConfig = config.resolvedConfiguration
+        val pluginDepsFirst = resolvedConfig.firstLevelModuleDependencies
+        val pluginDeps = resolvedConfig.resolvedArtifacts
 
-        if (!project.pluginManager.hasPlugin(dokkaPluginName)) {
-            project.pluginManager.apply(dokkaPluginName)
-        }
+        Log.log("Plugin dependencies resolved " +
+                if (resolvedConfig.hasError() ) "(errored)" else "(ok)\n" +
+                "${pluginDepsFirst.map { it.toString() }.joinToString("\n - ","\n - ")}\n")
 
-        val compileKotlin = project.tasks.getByPath(compileKotlinTaskName)
+        project.dependencies.add("compileClasspath", "org.jetbrains.kotlin:kotlin-stdlib:1.2.41")
+        project.dependencies.add("compileClasspath", "$protelisGroup:$protelisInterpreterDepName:11.1.0")
+        // NOTE: it doesn't work on "kotlinCompilerClasspath" configuration
+        //project.configurations.getByName("kotlinCompilerClasspath").dependencies.addAll(config.dependencies)
+        */
+
+        val compileKotlin = project.tasks.getByPath(compileKotlinTaskName) as org.jetbrains.kotlin.gradle.tasks.KotlinCompile
         compileKotlin.dependsOn(generateKotlinFromProtelisTaskName)
 
         // Configure Dokka plugin
