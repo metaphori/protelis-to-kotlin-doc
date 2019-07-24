@@ -71,12 +71,14 @@ class Protelis2KotlinDocPlugin : Plugin<Project> {
         addRepoIfNotAlreadyPresent(project.repositories, project.repositories.jcenter())
         addRepoIfNotAlreadyPresent(project.repositories, project.repositories.mavenCentral())
 
+        /*
         Log.log("Buildscript configs: " + project.buildscript.configurations.map { it.name })
         val buildscriptConf = project.buildscript.configurations.create("download")
         // project.buildscript.configurations.findByName("classpath")!! // Cannot change dependencies of configuration ':classpath' after it has been resolved
         project.buildscript.dependencies.add(buildscriptConf.name, "org.jlleitschuh.gradle.ktlint:org.jlleitschuh.gradle.ktlint.gradle.plugin:8.2.0") // org.jlleitschuh.gradle:ktlint.gradle:8.2.0
         val resconf = buildscriptConf.resolve()
         Log.log("Resolved plugins: " + resconf.map { it.absolutePath })
+        */
 
         applyPluginIfNotAlreadyApplied(project, kotlinPluginId)
         applyPluginIfNotAlreadyApplied(project, kotlinLintPluginId)
@@ -134,6 +136,7 @@ class Protelis2KotlinDocPlugin : Plugin<Project> {
 
         project.task("configureProtelis2KotlinPluginTasks") {
             genKotlinTask.dependsOn(it.name)
+            compileKotlin.dependsOn("ktlintCheck")
             it.doLast {
                 genKotlinTask.inputs.files(project.fileTree(extension.baseDir.get()))
                 genKotlinTask.outputs.files(project.fileTree(extension.kotlinDestDir.get()))

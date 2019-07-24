@@ -274,13 +274,13 @@ fun generateKotlinDoc(docs: ProtelisFunDoc): String {
     return "/**\n" +
             docPieces.map { p ->
                 if (p is DocText) {
-                    p.text.lines().map { "  * $it" }.joinToString("\n")
+                    p.text.lines().map { if (it.trim().isEmpty()) "  *" else "  * ${it.trim()}" }.joinToString("\n")
                 } else if (p is DocParam) {
-                    "  * @param ${p.paramName} ${p.paramDescription}"
+                    "  * @param ${p.paramName} ${p.paramDescription.trim()}"
                 } else if (p is DocReturn) {
-                    "  * @return ${p.returnDescription}"
+                    "  * @return ${p.returnDescription.trim()}"
                 } else if (p is DocDirective) {
-                    "  * @${p.directive} ${p.description}"
+                    "  * @${p.directive} ${p.description.trim()}"
                 } else ""
             }.joinToString("\n") + "\n  */"
 }
@@ -296,7 +296,7 @@ fun generateKotlinType(protelisType: String): String = when (protelisType) {
         """\(([^\)]*)\)\s*->\s*(.*)""".toRegex().matchEntire(protelisType)?.let { matchRes ->
             val args = matchRes.groupValues[1].split(",").map { generateKotlinType(it.trim()) }
             val ret = generateKotlinType(matchRes.groupValues[2])
-            """(${args.joinToString(",")}) -> $ret"""
+            """(${args.joinToString(", ")}) -> $ret"""
         } ?: """\[.*\]""".toRegex().matchEntire(protelisType)?.let { _ ->
             registerProtelisType("Tuple")
             "Tuple" // "List<${generateKotlinType()}>"
@@ -322,7 +322,7 @@ fun sanitizeNameForKotlin(name: String): String = when (name) {
  * Generates a Kotlin function from a Protelis function descriptor
  */
 fun generateKotlinFun(fn: ProtelisFun): String {
-    var genTypesStr = fn.genericTypes.joinToString(",")
+    var genTypesStr = fn.genericTypes.joinToString(", ")
     if (!genTypesStr.isEmpty()) genTypesStr = " <$genTypesStr>"
 
     return "@Suppress(\"UNUSED_PARAMETER\")\nfun$genTypesStr ${sanitizeNameForKotlin(fn.name)}(" +
@@ -438,7 +438,7 @@ fun main(args: Array<String>) {
             "ExecutionContext", "ExecutionEnvironment" -> "org.protelis.vm.$it"
             "Tuple" -> "org.protelis.lang.datatype.$it"
             else -> ""
-        } }.filterNot { it.isEmpty() }.map { "import " + it }.joinToString("\n") + "\n\n"
+        } }.filterNot { it.isEmpty() }.map { "import " + it }.joinToString("\n") + "\n"
 
         val kotlinFullCode = pkgCode + importCode + kotlinCode
 

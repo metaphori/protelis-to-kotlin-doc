@@ -22,6 +22,7 @@ group = "org.protelis"
 repositories {
     mavenCentral()
     jcenter()
+    maven(url="https://plugins.gradle.org/m2/")
 }
 
 gitSemVer {
@@ -35,6 +36,7 @@ dependencies {
     implementation(gradleApi())
     implementation(Libs.dokka_gradle_plugin)
     implementation(Libs.kotlin_gradle_plugin)
+    implementation("org.jlleitschuh.gradle.ktlint:org.jlleitschuh.gradle.ktlint.gradle.plugin:8.2.0")
 
     testImplementation(Libs.kotlin_test)
     testImplementation(Libs.kotlin_test_junit)
