@@ -36,7 +36,7 @@ fun applyPluginIfNotAlreadyApplied(project: Project, pluginId: String) {
 }
 
 fun addRepoIfNotAlreadyPresent(repoHandler: RepositoryHandler, repo: ArtifactRepository) {
-    if(!repoHandler.contains(repo)) {
+    if (!repoHandler.contains(repo)) {
         repoHandler.add(repo)
     }
 }

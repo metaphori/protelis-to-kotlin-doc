@@ -22,7 +22,7 @@ group = "org.protelis"
 repositories {
     mavenCentral()
     jcenter()
-    maven(url="https://plugins.gradle.org/m2/")
+    maven(url = "https://plugins.gradle.org/m2/")
 }
 
 gitSemVer {
