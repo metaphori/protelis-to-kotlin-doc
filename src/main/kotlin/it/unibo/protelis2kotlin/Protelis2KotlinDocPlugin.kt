@@ -1,121 +1,92 @@
 package it.unibo.protelis2kotlin
 
-import org.gradle.api.JavaVersion
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.provider.Property
-import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
-import java.io.File
+import org.gradle.kotlin.dsl.invoke
+import org.jetbrains.dokka.DokkaVersion
+import org.jetbrains.dokka.gradle.DokkaTask
+import org.jetbrains.kotlin.config.KotlinCompilerVersion
 import java.io.File.separator as SEP
 
 /**
  * Extension for the Protelis2KotlinDoc plugin.
  * @param baseDir The base directory from which looking for Protelis files
  * @param destDir The directory that will contain the generated docs
- * @param kotlinVersion
- * @param protelisVersion
+ * @param kotlinDestDir destubatuib directirt for the intermediate Kotlin kode
+ * @param debug enables debug output
+ * @param
  */
-open class Protelis2KotlinDocPluginExtension @JvmOverloads constructor(
+open class ProtelisDocExtension @JvmOverloads constructor(
     private val project: Project,
-    val baseDir: Property<String> = project.propertyWithDefault("."),
+    val baseDir: Property<String> = project.propertyWithDefault(project.path),
     val destDir: Property<String> = project.propertyWithDefault(project.buildDir.path + "${SEP}protelis-docs$SEP"),
-    val kotlinDestDir: Property<String> = project.propertyWithDefault(project.buildDir.path + "${SEP}kotlin-for-protelis$SEP"),
-    val kotlinVersion: Property<String> = project.propertyWithDefault("+"),
-    val protelisVersion: Property<String> = project.propertyWithDefault("+"),
-    val outputFormat: Property<String> = project.propertyWithDefault("javadoc"),
-    val automaticDependencies: Property<Boolean> = project.propertyWithDefault(false),
+    val kotlinDestDir: Property<String> =
+        project.propertyWithDefault(project.buildDir.path + "${SEP}kotlin-for-protelis$SEP"),
     val debug: Property<Boolean> = project.propertyWithDefault(false)
 )
 
 /**
- * Protelis2KotlinDoc Gradle Plugin: reuses the Protelis2Kotlin and Dokka plugins to generate Kotlin docs from Protelis code.
+ * Protelis2KotlinDoc Gradle Plugin:
+ * reuses the Protelis2Kotlin and Dokka plugins to generate Kotlin docs from Protelis code.
  */
 class Protelis2KotlinDocPlugin : Plugin<Project> {
-    private val generateProtelisDocTaskName = "generateProtelisDoc"
+    private val protelisDocTaskName = "protelisdoc"
     private val generateKotlinFromProtelisTaskName = "generateKotlinFromProtelis"
-    private val compileKotlinTaskName = "compileKotlin"
-
-    private val dokkaTaskName = "dokka"
+    private val extensionName = "protelisdoc"
     private val dokkaPluginName = "org.jetbrains.dokka"
-    private val kotlinPluginName = "org.jetbrains.kotlin.jvm"
-    private val protelis2KotlinDocPlugin = "Protelis2KotlinDoc"
-
-    private val protelisGroup = "org.protelis"
-    private val protelisInterpreterDepName = "protelis-interpreter"
-    private val kotlinGroup = "org.jetbrains.kotlin"
-    private val kotlinStdlibDepName = "kotlin-stdlib"
-
-    private val implConfiguration = "implementation"
 
     override fun apply(project: Project) {
-        val extension = project.extensions.create(protelis2KotlinDocPlugin, Protelis2KotlinDocPluginExtension::class.java, project)
-        if (JavaVersion.current() > JavaVersion.VERSION_1_8) extension.outputFormat.set("html")
-
-        if (!project.repositories.contains(project.repositories.jcenter())) {
-            project.repositories.add(project.repositories.jcenter())
-        }
-        if (!project.repositories.contains(project.repositories.mavenCentral())) {
-            project.repositories.add(project.repositories.mavenCentral())
-        }
-
-        if (!project.pluginManager.hasPlugin(kotlinPluginName)) {
-            project.pluginManager.apply(kotlinPluginName)
-        }
-
-        // Add dependency to Kotlin stdlib for TODO()s and Protelis
-        if (extension.automaticDependencies.get()) {
-            val deps = project.configurations.getByName(implConfiguration).dependencies
-            if (!deps.any { it.group==kotlinGroup && it.name==kotlinStdlibDepName }) {
-                project.dependencies.add(implConfiguration, "$kotlinGroup:$kotlinStdlibDepName:${extension.kotlinVersion.get()}")
-            }
-
-            if (!deps.any { it.group==protelisGroup && it.name==protelisInterpreterDepName }) {
-                project.dependencies.add(implConfiguration, "$protelisGroup:$protelisInterpreterDepName:${extension.protelisVersion.get()}")
-            }
-        }
-
+        val extension = project.extensions
+            .create(extensionName, ProtelisDocExtension::class.java, project)
         if (!project.pluginManager.hasPlugin(dokkaPluginName)) {
             project.pluginManager.apply(dokkaPluginName)
         }
-
-        val compileKotlin = project.tasks.getByPath(compileKotlinTaskName)
-        compileKotlin.dependsOn(generateKotlinFromProtelisTaskName)
-
-        // Configure Dokka plugin
-        val dokkaTask = project.tasks.getByName(dokkaTaskName)
-        dokkaTask.setProperty("jdkVersion", 8)
-        dokkaTask.setProperty("reportUndocumented", true)
-        dokkaTask.dependsOn(compileKotlinTaskName)
-        dokkaTask.setProperty("outputDirectory", extension.destDir.get())
-        dokkaTask.setProperty("outputFormat", extension.outputFormat.get())
-
-        // Configure Kotlin plugin
-        val kotlinPluginExt = project.extensions.getByName("kotlin") as KotlinJvmProjectExtension
-        val mainKotlinSrcset = kotlinPluginExt.sourceSets.getByName("main")
-        // This doesn't work: mainKotlinSrcset.kotlin.srcDirs.add(File(*))
-        // This also doesn't work: mainKotlinSrcset.resources.srcDirs.add(File(*))
-        // This doesn't work as well: mainKotlinSrcset.kotlin.sourceDirectories.files.add(File(*))
-        mainKotlinSrcset.kotlin.setSrcDirs(setOf(File(extension.kotlinDestDir.get())))
-
+        val config = project.configurations.create(extensionName) { configuration ->
+            configuration.dependencies.add(
+                project.dependencies.create(
+                    "org.jetbrains.kotlin:kotlin-stdlib:${KotlinCompilerVersion.VERSION}"
+                )
+            )
+        }
+        // Kotlin generation task
         val genKotlinTask = project.task(generateKotlinFromProtelisTaskName) {
             it.doLast {
-                main(arrayOf(extension.baseDir.get(), extension.kotlinDestDir.get(), if (extension.debug.get()) "1" else "0"))
+                project.logger.debug(
+                    """
+                    Applying plugin ProtelisDoc. Configuration:
+                    - debug = ${extension.debug.get()}
+                    - baseDir = ${extension.baseDir.get()}
+                    - destDir = ${extension.destDir.get()}
+                    - kotlinDestDir = ${extension.kotlinDestDir.get()}
+                    """.trimIndent()
+                )
+                project.protelis2Kt(extension.baseDir.get(), extension.kotlinDestDir.get())
             }
-            Log.log("[${it.name}]\nInputs: ${it.inputs.files.files}\nOutputs: ${it.outputs.files.files}")
         }
-
-        val genDocTask = project.task(generateProtelisDocTaskName) {
-            it.dependsOn(dokkaTaskName)
-            Log.log("[${it.name}]\nInputs: ${it.inputs.files.files}\nOutputs: ${it.outputs.files.files}")
+        // ProtelisDoc task, based on Dokka
+        val protelisdoc = project.tasks.register(protelisDocTaskName, DokkaTask::class.java) { dokkaTask ->
+            dokkaTask.plugins.dependencies.add(
+                project.dependencies.create("org.jetbrains.dokka:javadoc-plugin:${DokkaVersion.version}")
+            )
+            dokkaTask.dependsOn(genKotlinTask)
         }
-
-        project.task("configureProtelis2KotlinPluginTasks") {
-            genKotlinTask.dependsOn(it.name)
-            it.doLast {
-                genKotlinTask.inputs.files(project.fileTree(extension.baseDir.get()))
-                genKotlinTask.outputs.files(project.fileTree(extension.kotlinDestDir.get()))
-                genDocTask.inputs.files(project.fileTree(extension.baseDir.get()))
-                genDocTask.outputs.files(project.fileTree(extension.destDir.get()))
+        project.afterEvaluate {
+            protelisdoc.get().apply {
+                dokkaSourceSets { sourceSetContainer ->
+                    sourceSetContainer.create("protelisdoc") { sourceSet ->
+                        sourceSet.sourceRoots.setFrom(extension.kotlinDestDir.get())
+                        val resolvedConfiguration = config.resolvedConfiguration
+                        if (resolvedConfiguration.hasError()) {
+                            kotlin.runCatching { resolvedConfiguration.rethrowFailure() }.onFailure {
+                                logger.warn("ProtelisDoc failed dependecy resolution!", it)
+                            }
+                        } else {
+                            sourceSet.classpath.setFrom(config.resolvedConfiguration.files)
+                        }
+                    }
+                }
+                outputDirectory.set(extension.destDir.map { project.file(it) }.get())
             }
         }
     }

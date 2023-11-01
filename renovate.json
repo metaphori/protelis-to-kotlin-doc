@@ -1,0 +1,17 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>DanySK/renovate-config:gradle-plugin"
+  ],
+  "includeForks": true,
+  "packageRules": [
+    {
+      "description": "Trigger a patch update on some dependencies",
+      "matchPackagePatterns": [
+        ".*dokka.*",
+        ".*kotlin.*"
+      ],
+      "semanticCommitScope": "core-deps"
+    }
+  ]
+}

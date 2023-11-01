@@ -1,75 +1,84 @@
-import org.gradle.api.tasks.testing.logging.TestLogEvent
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+@file:Suppress("UnstableApiUsage")
 
+@Suppress("DSL_SCOPE_VIOLATION")
 plugins {
-    application
-    kotlin("jvm") version Versions.org_jetbrains_kotlin
     `maven-publish`
     signing
-    id("de.fayard.buildSrcVersions") version Versions.de_fayard_buildsrcversions_gradle_plugin
-    id("com.gradle.build-scan") version Versions.com_gradle_build_scan_gradle_plugin
-    id("com.gradle.plugin-publish") version Versions.com_gradle_plugin_publish_gradle_plugin
-    id("org.danilopianini.git-sensitive-semantic-versioning") version
-        Versions.org_danilopianini_git_sensitive_semantic_versioning_gradle_plugin
-    id("org.danilopianini.publish-on-central") version Versions.org_danilopianini_publish_on_central_gradle_plugin
-    id("org.jetbrains.dokka") version Versions.org_jetbrains_dokka
-    id("org.jlleitschuh.gradle.ktlint") version Versions.org_jlleitschuh_gradle_ktlint_gradle_plugin
     `java-gradle-plugin`
+    alias(libs.plugins.dokka)
+    alias(libs.plugins.gitSemVer)
+    alias(libs.plugins.gradlePluginPublish)
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.qa)
+    alias(libs.plugins.multiJvmTesting)
+    alias(libs.plugins.publishOnCentral)
+    alias(libs.plugins.taskTree)
 }
 
 group = "org.protelis"
 
 repositories {
     mavenCentral()
-    jcenter()
+    gradlePluginPortal()
 }
 
 gitSemVer {
     maxVersionLength.set(20)
-    version = computeGitSemVer() // THIS IS MANDATORY, AND MUST BE LAST IN BLOCK
+    buildMetadataSeparator.set("-")
+}
+
+multiJvm {
+    jvmVersionForCompilation.set(8)
+    maximumSupportedJvmVersion.set(latestJavaSupportedByGradle)
 }
 
 dependencies {
-    implementation(Libs.kotlin_stdlib)
-    implementation(Libs.kotlin_reflect)
     implementation(gradleApi())
-    implementation(Libs.dokka_gradle_plugin)
-    implementation(Libs.kotlin_gradle_plugin)
+    implementation(gradleKotlinDsl())
+    implementation(kotlin("stdlib"))
+    implementation(kotlin("reflect"))
+    implementation(kotlin("gradle-plugin"))
+    implementation(libs.kotlin.compiler)
+    implementation(libs.bundles.dokka)
 
-    testImplementation(Libs.kotlin_test)
-    testImplementation(Libs.kotlin_test_junit)
     testImplementation(gradleTestKit())
-    testImplementation(Libs.kotlintest_runner_junit5)
+    testImplementation(libs.bundles.kotlin.testing)
 }
 
-application {
-    mainClassName = "it.unibo.protelis2kotlin.AppKt"
-}
-
-tasks {
-    javadocJar {
-        dependsOn(dokka)
-        from(dokka.get().outputDirectory)
+tasks.withType<Test> {
+    useJUnitPlatform()
+    testLogging {
+        showStandardStreams = true
+        showCauses = true
+        showStackTraces = true
+        events(*org.gradle.api.tasks.testing.logging.TestLogEvent.values())
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }
 }
 
-ktlint {
-    ignoreFailures.set(false)
+tasks.withType<Copy> {
+    duplicatesStrategy = org.gradle.api.file.DuplicatesStrategy.WARN
+}
+
+if (System.getenv("CI") == true.toString()) {
+    signing {
+        val signingKey: String? by project
+        val signingPassword: String? by project
+        useInMemoryPgpKeys(signingKey, signingPassword)
+    }
 }
 
 val websiteUrl = "https://github.com/Protelis/Protelis-KDoc-generator"
 
 publishOnCentral {
     projectDescription.set("A translator from documented Protelis code to compiling Kotlin interfaces")
-    projectLongName.set("Protelis KDoc generator")
+    projectLongName.set("ProtelisDoc generator")
     projectUrl.set(websiteUrl)
     scmConnection.set("git@github.com:Protelis/Protelis-KDoc-generator.git")
-}
-
-pluginBundle {
-    website = websiteUrl
-    vcsUrl = websiteUrl
-    tags = listOf("protelis", "javadoc", "documentation", "protelisdoc", "dokka", "kotlin")
+    repository("https://maven.pkg.github.com/Protelis/${rootProject.name}".toLowerCase(), name = "github") {
+        user.set("danysk")
+        password.set(System.getenv("GITHUB_TOKEN"))
+    }
 }
 
 publishing {
@@ -92,48 +101,19 @@ publishing {
     }
 }
 
-tasks {
-    "test"(Test::class) {
-        useJUnitPlatform()
-        testLogging.showStandardStreams = true
-        testLogging {
-            showCauses = true
-            showStackTraces = true
-            showStandardStreams = true
-            events(*TestLogEvent.values())
-        }
-    }
-    register("createClasspathManifest") {
-        val outputDir = file("$buildDir/$name")
-        inputs.files(sourceSets.main.get().runtimeClasspath)
-        outputs.dir(outputDir)
-        doLast {
-            outputDir.mkdirs()
-            file("$outputDir/plugin-classpath.txt").writeText(sourceSets.main.get().runtimeClasspath.joinToString("\n"))
-        }
-    }
-    withType<KotlinCompile> {
-        kotlinOptions.jvmTarget = "1.6"
-    }
-}
-
-// Add the classpath file to the test runtime classpath
-dependencies {
-    testRuntimeOnly(files(tasks["createClasspathManifest"]))
+pluginBundle {
+    website = websiteUrl
+    vcsUrl = websiteUrl
+    tags = listOf("protelis", "javadoc", "documentation", "protelisdoc", "dokka", "kotlin")
 }
 
 gradlePlugin {
     plugins {
-        create("Protelis2KotlinDoc") {
+        create("ProtelisDoc") {
             id = "org.protelis.protelisdoc"
             displayName = "Protelis Documentation Engine"
             description = "A plugin that translates Protelis modules to Kotlin code, then generates the function documentation via Dokka"
             implementationClass = "it.unibo.protelis2kotlin.Protelis2KotlinDocPlugin"
         }
     }
-}
-
-buildScan {
-    setTermsOfServiceUrl("https://gradle.com/terms-of-service")
-    setTermsOfServiceAgree("yes")
 }
